@@ -1,0 +1,5 @@
+{
+  "symbols": ["BTCUSDT"],
+  "timeframes": ["M5"],
+  "decision": {"long_thr":70,"short_thr":30}
+}

@@ -27,18 +27,19 @@ std::string BinanceUserStream::rest_base() const {
 }
 
 bool BinanceUserStream::create_listen_key(std::string& out_key) {
-    // POST /api/v3/userDataStream   (X-MBX-APIKEY header)
     try {
-        auto url = rest_base() + "/api/v3/userDataStream";
-        cpr::Response r = cpr::Post(cpr::Url{url},
-                                    cpr::Header{{"X-MBX-APIKEY", api_key_}},
-                                    cpr::Timeout{5000},
-                                    cpr::VerifySsl{true});
+        const std::string url = rest_base() + "/api/v3/userDataStream";
+        cpr::Response r = cpr::Post(
+            cpr::Url{url},
+            cpr::Header{{"X-MBX-APIKEY", api_key_}},
+            cpr::Timeout{5000},
+            cpr::VerifySsl{true}
+        );
         if (r.status_code >= 300) {
             spdlog::error("userDataStream create failed: {} {}", r.status_code, r.text);
             return false;
         }
-        auto j = json::parse(r.text);
+        json j = json::parse(r.text.empty() ? "{}" : r.text);
         if (j.contains("listenKey")) {
             out_key = j["listenKey"].get<std::string>();
             return true;
@@ -50,23 +51,26 @@ bool BinanceUserStream::create_listen_key(std::string& out_key) {
 }
 
 void BinanceUserStream::keepalive_loop() {
-    // 30 percenként PUT /api/v3/userDataStream   (listenKey életben tartása)
     while (running_.load()) {
         std::this_thread::sleep_for(std::chrono::minutes(25));
         if (!running_.load()) break;
+
         std::string lk;
         {
             std::lock_guard<std::mutex> lk_m(mtx_);
             lk = listen_key_;
         }
         if (lk.empty()) continue;
+
         try {
-            auto url = rest_base() + "/api/v3/userDataStream";
-            cpr::Response r = cpr::Put(cpr::Url{url},
-                                       cpr::Header{{"X-MBX-APIKEY", api_key_}},
-                                       cpr::Body{std::string("listenKey=") + lk},
-                                       cpr::Timeout{5000},
-                                       cpr::VerifySsl{true}});
+            const std::string url = rest_base() + "/api/v3/userDataStream";
+            cpr::Response r = cpr::Put(
+                cpr::Url{url},
+                cpr::Header{{"X-MBX-APIKEY", api_key_}},
+                cpr::Body{"listenKey=" + lk},
+                cpr::Timeout{5000},
+                cpr::VerifySsl{true}
+            );
             if (r.status_code >= 300) {
                 spdlog::warn("userDataStream keepalive {} {}", r.status_code, r.text);
             }
@@ -77,29 +81,26 @@ void BinanceUserStream::keepalive_loop() {
 }
 
 void BinanceUserStream::connect_ws(const std::string& listen_key) {
-    // wss://stream.binance.com:9443/ws/<listenKey>
-    // testnet: ugyanaz a host (Binance szerint), de a listenKey a testnet szerverről jön
-    std::string url = std::string("wss://stream.binance.com:9443/ws/") + listen_key;
+    // Binance SPOT user-data: wss://stream.binance.com:9443/ws/<listenKey>
+    const std::string url = std::string("wss://stream.binance.com:9443/ws/") + listen_key;
 
     ws_ = std::make_unique<ix::WebSocket>();
     ws_->setUrl(url);
-
-    // (opcionális) kapcsoljuk ki a permessage-deflate-et, ha gondot okozna
     ws_->disablePerMessageDeflate();
 
     ws_->setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg) {
-        if (msg->type == ix::WebSocketMessageType::Message) {
+        using ix::WebSocketMessageType;
+        if (msg->type == WebSocketMessageType::Message) {
             try {
-                auto j = json::parse(msg->str);
+                json j = json::parse(msg->str);
 
-                // Trade execution update: e.g. "executionReport"
+                // Végrehajtási jelentés
                 if (j.contains("e") && j["e"] == "executionReport") {
                     ExecUpdate u;
                     u.symbol = j.value("s", "");
-                    u.side   = j.value("S", ""); // BUY/SELL
-                    // Binance számos mezőt stringként ad — konvertáljuk
-                    try { u.lastQty   = std::stod(j.value("l", std::string("0"))); } catch(...) {}
-                    try { u.lastPrice = std::stod(j.value("L", std::string("0"))); } catch(...) {}
+                    u.side   = j.value("S", "");
+                    try { u.lastQty   = std::stod(j.value("l", std::string("0"))); } catch (...) {}
+                    try { u.lastPrice = std::stod(j.value("L", std::string("0"))); } catch (...) {}
 
                     ExecCB cb;
                     {
@@ -109,20 +110,20 @@ void BinanceUserStream::connect_ws(const std::string& listen_key) {
                     if (cb) cb(u);
                 }
 
-                // Egyéb események: OUTBOUND_ACCOUNT_POSITION, balanceUpdate, stb. — igény szerint bővíthető
+                // További eventek: OUTBOUND_ACCOUNT_POSITION, balanceUpdate, stb.
 
             } catch (const std::exception& e) {
                 spdlog::warn("userstream parse err: {}", e.what());
             }
-        } else if (msg->type == ix::WebSocketMessageType::Open) {
+        } else if (msg->type == WebSocketMessageType::Open) {
             spdlog::info("UserStream WS open");
-        } else if (msg->type == ix::WebSocketMessageType::Close) {
+        } else if (msg->type == WebSocketMessageType::Close) {
             spdlog::warn("UserStream WS closed code={} reason={}", msg->closeInfo.code, msg->closeInfo.reason);
-            // Alap reconnect: ha még running, próbáljunk vissza
             if (running_.load()) {
+                // egyszerű reconnect
                 try { ws_->start(); } catch (...) {}
             }
-        } else if (msg->type == ix::WebSocketMessageType::Error) {
+        } else if (msg->type == WebSocketMessageType::Error) {
             spdlog::error("UserStream WS error: {}", msg->errorInfo.reason);
         }
     });
@@ -153,9 +154,14 @@ bool BinanceUserStream::start() {
 void BinanceUserStream::stop() {
     if (!running_.load()) return;
     running_.store(false);
+
     try {
-        if (ws_) { ws_->stop(); ws_.reset(); }
+        if (ws_) {
+            ws_->stop();
+            ws_.reset();
+        }
     } catch (...) {}
+
     if (keepalive_thread_.joinable()) keepalive_thread_.join();
 }
 

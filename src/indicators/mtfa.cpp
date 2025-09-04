@@ -1,1 +1,2 @@
-// mtfa.cpp from addon
+#include "indicators/mtfa.hpp"
+// minden a headerben implementálva (inline jelleggel)

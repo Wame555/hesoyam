@@ -27,7 +27,7 @@ set(USE_ZLIB      OFF CACHE BOOL "" FORCE)
 
 ##FetchContent_Declare(imgui_sfml GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git GIT_TAG v2.6)
 ##FetchContent_MakeAvailable(imgui_sfml)
-find_package(SFML 2.6 CONFIG REQUIRED COMPONENTS System Window Graphics)
+find_package(SFML CONFIG REQUIRED COMPONENTS Graphics Window System)
 find_package(ImGui-SFML CONFIG REQUIRED)
 
 FetchContent_Declare(fmt GIT_REPOSITORY https://github.com/fmtlib/fmt.git GIT_TAG 11.0.2)

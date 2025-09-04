@@ -93,10 +93,17 @@ json BinanceRest::http_post(const std::string& path, const std::string& body_or_
         q += "&signature="+sig;
     }
     cpr::Response r;
-    if (body_is_payload){
-        r = cpr::Post(cpr::Url{url}, cpr::Header{hdr}, cpr::Body{q}, cpr::Timeout{cfg_.timeout_ms});
-    }else{
-        r = cpr::Post(cpr::Url{url+"?"+q}, cpr::Header{hdr}, cpr::Timeout{cfg_.timeout_ms});
+    if (body_is_payload) {
+    r = cpr::Post(cpr::Url{url},
+                  cpr::Header{hdr},
+                  cpr::Body{q},
+                  cpr::Timeout{cfg_.timeout_ms},
+                  cpr::VerifySsl{true});
+    } else {
+    r = cpr::Post(cpr::Url{url + "?" + q},
+                  cpr::Header{hdr},
+                  cpr::Timeout{cfg_.timeout_ms},
+                  cpr::VerifySsl{true});
     }
     if (r.status_code>=400){ spdlog::warn("POST {} : {} {}", path, r.status_code, r.text); }
     try{ return json::parse(r.text.empty()?"{}":r.text); } catch(...){ return json::object(); }
@@ -112,7 +119,10 @@ json BinanceRest::http_delete(const std::string& path, const std::string& query,
         auto sig = sign_query(q);
         q += "&signature="+sig;
     }
-    cpr::Response r = cpr::Delete(cpr::Url{url+"?"+q}, cpr::Header{hdr}, cpr::Timeout{cfg_.timeout_ms});
+    cpr::Response r = cpr::Delete(cpr::Url{url + "?" + q},
+                              cpr::Header{hdr},
+                              cpr::Timeout{cfg_.timeout_ms},
+                              cpr::VerifySsl{true});
     if (r.status_code>=400){ spdlog::warn("DELETE {} : {} {}", path, r.status_code, r.text); }
     try{ return json::parse(r.text.empty()?"{}":r.text); } catch(...){ return json::object(); }
 }

@@ -9,6 +9,12 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+add_library(data
+    src/data/binance_ws.cpp
+    src/data/binance_userstream.cpp)
+target_link_libraries(data PUBLIC ixwebsocket nlohmann_json::nlohmann_json spdlog::spdlog fmt::fmt cpr::cpr)
+target_include_directories(data PUBLIC include)
+
 // --- Execution report (fill/részfill)
 struct ExecUpdate {
     uint64_t orderId{0};

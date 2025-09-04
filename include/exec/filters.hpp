@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <cmath>
 
 namespace exec {
 // Minimál szűrő helper — a valós Binance szűrők (LOT_SIZE, MIN_NOTIONAL) későbbre

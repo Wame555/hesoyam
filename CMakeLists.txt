@@ -16,6 +16,7 @@ FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git G
 FetchContent_MakeAvailable(imgui)
 # mutassunk rá az imgui.h-t tartalmazó könyvtárra
 set(IMGUI_DIR "${imgui_SOURCE_DIR}" CACHE PATH "" FORCE)
+set(SFML_USE_SYSTEM_DEPS OFF CACHE BOOL "" FORCE)
 # ImGui-SFML -> most már látja a sfml-graphics, sfml-window, stb. targeteket
 FetchContent_Declare(imgui_sfml GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git GIT_TAG v2.6)
 FetchContent_MakeAvailable(imgui_sfml)

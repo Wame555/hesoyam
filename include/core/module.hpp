@@ -6,7 +6,7 @@
 
 // Egy modul visszatérési típusa
 struct ModuleResult {
-    double score{50.0};      // 0..100
+    double score{50.0};           // 0..100
     Signal signal{Signal::Neutral};
     std::size_t warmup_bars{0};
 };
@@ -33,4 +33,3 @@ public:
 inline double clamp01(double v) {
     return std::max(0.0, std::min(1.0, v));
 }
-// module.hpp from canvas

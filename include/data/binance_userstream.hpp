@@ -5,6 +5,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+
 #include <nlohmann/json.hpp>
 #include <cpr/cpr.h>
 #include <ixwebsocket/IXWebSocket.h>
@@ -14,13 +15,11 @@ namespace data {
 
 struct ExecUpdate {
     std::string symbol;
-    std::string side;     // "BUY"/"SELL"
-    double lastQty{0.0};  // legutóbbi végrehajtott mennyiség (BASE)
+    std::string side;     // "BUY" / "SELL"
+    double lastQty{0.0};
     double lastPrice{0.0};
 };
 
-// Egyszerű Binance SPOT user-data stream kliens (listenKey alapú).
-// Testnet: https://testnet.binance.vision
 class BinanceUserStream {
 public:
     using ExecCB = std::function<void(const ExecUpdate&)>;
@@ -28,10 +27,8 @@ public:
     BinanceUserStream(std::string api_key, bool testnet = true);
     ~BinanceUserStream();
 
-    // beállítható callback trade/exec típusú eventekhez
     void set_on_exec(ExecCB cb);
 
-    // indítás/leállítás
     bool start();
     void stop();
 

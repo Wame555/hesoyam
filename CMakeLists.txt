@@ -50,14 +50,16 @@ add_library(indicators
     src/indicators/sma_ema.cpp
     src/indicators/bollinger.cpp
     src/indicators/mtfa.cpp)
-
 target_link_libraries(indicators PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json)
 target_include_directories(indicators PUBLIC include)
 
-add_library(strategy
-    include/strategy/decision.hpp)
-target_link_libraries(strategy PUBLIC fmt::fmt spdlog::spdlog)
-target_include_directories(strategy PUBLIC include)
+add_library(strategy INTERFACE)
+target_include_directories(strategy INTERFACE include)
+target_link_libraries(strategy INTERFACE fmt::fmt spdlog::spdlog)
+
+add_library(sim INTERFACE)
+target_include_directories(sim INTERFACE include)
+target_link_libraries(sim INTERFACE spdlog::spdlog fmt::fmt)
 
 add_library(data
     src/data/binance_ws.cpp
@@ -65,28 +67,29 @@ add_library(data
 target_link_libraries(data PUBLIC ixwebsocket nlohmann_json::nlohmann_json spdlog::spdlog fmt::fmt)
 target_include_directories(data PUBLIC include)
 
-add_library(sim
-    include/sim/demo_account.hpp
-    include/sim/position_sim.hpp)
-target_link_libraries(sim PUBLIC spdlog::spdlog fmt::fmt)
-target_include_directories(sim PUBLIC include)
-
 add_library(telemetry
     src/telemetry/telegram_notifier.cpp)
 target_link_libraries(telemetry PUBLIC cpr::cpr spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
 target_include_directories(telemetry PUBLIC include)
 
+# --- exec (ÚJRA)
 add_library(exec
     src/exec/binance_rest.cpp
     src/exec/filters.cpp
     src/exec/order_state.cpp
     src/exec/position_tracker.cpp)
-target_link_libraries(exec PUBLIC cpr::cpr OpenSSL::SSL OpenSSL::Crypto spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
+target_link_libraries(exec PUBLIC
+    cpr::cpr OpenSSL::SSL OpenSSL::Crypto
+    spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
 target_include_directories(exec PUBLIC include)
 
 add_library(ui
     src/ui/gui_app.cpp)
-target_link_libraries(ui PUBLIC ImGui-SFML::ImGui-SFML sfml-graphics sfml-window sfml-system spdlog::spdlog fmt::fmt indicators strategy telemetry data sim exec)
+target_link_libraries(ui PUBLIC
+  ImGui-SFML::ImGui-SFML
+  sfml-graphics sfml-window sfml-system
+  spdlog::spdlog fmt::fmt
+  indicators strategy telemetry data sim exec)
 target_include_directories(ui PUBLIC include)
 
 # --- Alkalmazások

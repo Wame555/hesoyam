@@ -63,11 +63,20 @@ json BinanceRest::http_get(const std::string& path, const std::string& query, bo
         q += "&signature="+sig;
     }
     cpr::Header hdr = {{"X-MBX-APIKEY", cfg_.api_key}};
-    auto req = cpr::Get(cpr::Url{url}, cpr::Parameters{}, cpr::Header{signed_req?hdr: cpr::Header{}}, cpr::Parameters{{}}, cpr::Timeout{cfg_.timeout_ms}, cpr::Parameters{}, cpr::Parameters{}, cpr::Body{}, cpr::Proxies{}, cpr::VerifySsl{cpr::VerifySsl::Verify});
+    auto req = cpr::Get(cpr::Url{url}, cpr::Parameters{}, cpr::Header{signed_req?hdr: cpr::Header{}}, cpr::Parameters{{}}, cpr::Timeout{cfg_.timeout_ms}, cpr::Parameters{}, cpr::Parameters{}, cpr::Body{}, cpr::Proxies{}, cpr::VerifySsl{ cpr::VerifySsl{true});
     // cpr nem a legszebb itt; egyszerűbb:
     cpr::Response r;
-    if (!q.empty()) r = cpr::Get(cpr::Url{url+"?"+q}, cpr::Header{signed_req?hdr: cpr::Header{}}, cpr::Timeout{cfg_.timeout_ms});
-    else            r = cpr::Get(cpr::Url{url},            cpr::Header{signed_req?hdr: cpr::Header{}}, cpr::Timeout{cfg_.timeout_ms});
+if (!q.empty())
+    r = cpr::Get(cpr::Url{url + "?" + q},
+                 cpr::Header{signed_req ? hdr : cpr::Header{}},
+                 cpr::Timeout{cfg_.timeout_ms},
+                 cpr::VerifySsl{true});
+    
+    else
+    r = cpr::Get(cpr::Url{url},
+                 cpr::Header{signed_req ? hdr : cpr::Header{}},
+                 cpr::Timeout{cfg_.timeout_ms},
+                 cpr::VerifySsl{true});
     if (r.status_code>=400){ spdlog::warn("GET {} : {} {}", path, r.status_code, r.text); }
     try{ return json::parse(r.text.empty()?"{}":r.text); } catch(...){ return json::object(); }
 }

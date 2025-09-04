@@ -1,147 +1,162 @@
 #include "data/binance_userstream.hpp"
-#include <cstdlib>
+#include <chrono>
 
 using json = nlohmann::json;
 
-static double to_d(const json& j, const char* k){
-    if (j.contains(k) && j[k].is_string()) return std::strtod(j[k].get_ref<const std::string&>().c_str(), nullptr);
-    if (j.contains(k) && j[k].is_number()) return j[k].get<double>();
-    return 0.0;
+namespace data {
+
+static inline uint64_t now_ms() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
 BinanceUserStream::BinanceUserStream(std::string api_key, bool testnet)
-: api_key_(std::move(api_key)), testnet_(testnet) {}
+    : api_key_(std::move(api_key)), testnet_(testnet) {}
 
-BinanceUserStream::~BinanceUserStream(){ stop(); }
-
-bool BinanceUserStream::create_listen_key(){
-    auto url = rest_base()+"/api/v3/userDataStream";
-    auto r = cpr::Post(cpr::Url{url}, cpr::Header{{"X-MBX-APIKEY", api_key_}});
-    if (r.status_code>=300){
-        spdlog::error("userDataStream POST {}: {}", r.status_code, r.text);
-        return false;
-    }
-    try{
-        auto j = json::parse(r.text);
-        listen_key_ = j.value("listenKey", std::string{});
-    }catch(...){
-        spdlog::error("listenKey parse error: {}", r.text);
-    }
-    return !listen_key_.empty();
+BinanceUserStream::~BinanceUserStream() {
+    stop();
 }
 
-bool BinanceUserStream::start(){
-    if (api_key_.empty()) { spdlog::warn("No API key for user-data stream"); return false; }
-    if (!create_listen_key()) return false;
+void BinanceUserStream::set_on_exec(ExecCB cb) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    on_exec_ = std::move(cb);
+}
+
+std::string BinanceUserStream::rest_base() const {
+    return testnet_ ? "https://testnet.binance.vision" : "https://api.binance.com";
+}
+
+bool BinanceUserStream::create_listen_key(std::string& out_key) {
+    // POST /api/v3/userDataStream   (X-MBX-APIKEY header)
+    try {
+        auto url = rest_base() + "/api/v3/userDataStream";
+        cpr::Response r = cpr::Post(cpr::Url{url},
+                                    cpr::Header{{"X-MBX-APIKEY", api_key_}},
+                                    cpr::Timeout{5000},
+                                    cpr::VerifySsl{true});
+        if (r.status_code >= 300) {
+            spdlog::error("userDataStream create failed: {} {}", r.status_code, r.text);
+            return false;
+        }
+        auto j = json::parse(r.text);
+        if (j.contains("listenKey")) {
+            out_key = j["listenKey"].get<std::string>();
+            return true;
+        }
+    } catch (const std::exception& e) {
+        spdlog::error("create_listen_key ex: {}", e.what());
+    }
+    return false;
+}
+
+void BinanceUserStream::keepalive_loop() {
+    // 30 percenként PUT /api/v3/userDataStream   (listenKey életben tartása)
+    while (running_.load()) {
+        std::this_thread::sleep_for(std::chrono::minutes(25));
+        if (!running_.load()) break;
+        std::string lk;
+        {
+            std::lock_guard<std::mutex> lk_m(mtx_);
+            lk = listen_key_;
+        }
+        if (lk.empty()) continue;
+        try {
+            auto url = rest_base() + "/api/v3/userDataStream";
+            cpr::Response r = cpr::Put(cpr::Url{url},
+                                       cpr::Header{{"X-MBX-APIKEY", api_key_}},
+                                       cpr::Body{std::string("listenKey=") + lk},
+                                       cpr::Timeout{5000},
+                                       cpr::VerifySsl{true}});
+            if (r.status_code >= 300) {
+                spdlog::warn("userDataStream keepalive {} {}", r.status_code, r.text);
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("keepalive ex: {}", e.what());
+        }
+    }
+}
+
+void BinanceUserStream::connect_ws(const std::string& listen_key) {
+    // wss://stream.binance.com:9443/ws/<listenKey>
+    // testnet: ugyanaz a host (Binance szerint), de a listenKey a testnet szerverről jön
+    std::string url = std::string("wss://stream.binance.com:9443/ws/") + listen_key;
+
+    ws_ = std::make_unique<ix::WebSocket>();
+    ws_->setUrl(url);
+
+    // (opcionális) kapcsoljuk ki a permessage-deflate-et, ha gondot okozna
+    ws_->disablePerMessageDeflate();
+
+    ws_->setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg) {
+        if (msg->type == ix::WebSocketMessageType::Message) {
+            try {
+                auto j = json::parse(msg->str);
+
+                // Trade execution update: e.g. "executionReport"
+                if (j.contains("e") && j["e"] == "executionReport") {
+                    ExecUpdate u;
+                    u.symbol = j.value("s", "");
+                    u.side   = j.value("S", ""); // BUY/SELL
+                    // Binance számos mezőt stringként ad — konvertáljuk
+                    try { u.lastQty   = std::stod(j.value("l", std::string("0"))); } catch(...) {}
+                    try { u.lastPrice = std::stod(j.value("L", std::string("0"))); } catch(...) {}
+
+                    ExecCB cb;
+                    {
+                        std::lock_guard<std::mutex> lk(mtx_);
+                        cb = on_exec_;
+                    }
+                    if (cb) cb(u);
+                }
+
+                // Egyéb események: OUTBOUND_ACCOUNT_POSITION, balanceUpdate, stb. — igény szerint bővíthető
+
+            } catch (const std::exception& e) {
+                spdlog::warn("userstream parse err: {}", e.what());
+            }
+        } else if (msg->type == ix::WebSocketMessageType::Open) {
+            spdlog::info("UserStream WS open");
+        } else if (msg->type == ix::WebSocketMessageType::Close) {
+            spdlog::warn("UserStream WS closed code={} reason={}", msg->closeInfo.code, msg->closeInfo.reason);
+            // Alap reconnect: ha még running, próbáljunk vissza
+            if (running_.load()) {
+                try { ws_->start(); } catch (...) {}
+            }
+        } else if (msg->type == ix::WebSocketMessageType::Error) {
+            spdlog::error("UserStream WS error: {}", msg->errorInfo.reason);
+        }
+    });
+
+    ws_->start();
+}
+
+bool BinanceUserStream::start() {
+    if (running_.load()) return true;
     running_.store(true);
-    connect_ws();
-    keepalive_thr_ = std::thread([this]{ keepalive_loop(); });
+
+    std::string lk;
+    if (!create_listen_key(lk)) {
+        running_.store(false);
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lk_m(mtx_);
+        listen_key_ = lk;
+    }
+
+    connect_ws(lk);
+    keepalive_thread_ = std::thread(&BinanceUserStream::keepalive_loop, this);
     return true;
 }
 
-void BinanceUserStream::stop(){
+void BinanceUserStream::stop() {
+    if (!running_.load()) return;
     running_.store(false);
-    try { ws_.stop(); } catch(...) {}
-    if (keepalive_thr_.joinable()) keepalive_thr_.join();
-    if (!listen_key_.empty()){
-        auto url = rest_base()+"/api/v3/userDataStream?listenKey="+listen_key_;
-        (void)cpr::Delete(cpr::Url{url}, cpr::Header{{"X-MBX-APIKEY", api_key_}});
-        listen_key_.clear();
-    }
+    try {
+        if (ws_) { ws_->stop(); ws_.reset(); }
+    } catch (...) {}
+    if (keepalive_thread_.joinable()) keepalive_thread_.join();
 }
 
-void BinanceUserStream::keepalive_loop(){
-    // Binance: 60 perc — mi 30 percenként frissítünk
-    while (running_.load()){
-        std::this_thread::sleep_for(std::chrono::minutes(30));
-        if (!running_.load()) break;
-        if (listen_key_.empty()) continue;
-        auto url = rest_base()+"/api/v3/userDataStream?listenKey="+listen_key_;
-        auto r = cpr::Put(cpr::Url{url}, cpr::Header{{"X-MBX-APIKEY", api_key_}});
-        if (r.status_code>=300) spdlog::warn("userStream keepalive HTTP {}: {}", r.status_code, r.text);
-    }
-}
-
-void BinanceUserStream::connect_ws(){
-    std::string url = ws_base()+"/"+listen_key_;
-    ws_.setUrl(url);
-    ws_.setPingInterval(15);
-    ws_.setOnMessage([this](const ix::WebSocketMessagePtr& msg){
-        using ix::WebSocketMessageType;
-        switch (msg->type){
-            case WebSocketMessageType::Open:
-                spdlog::info("User-data WS open");
-                break;
-            case WebSocketMessageType::Message:
-                handle_msg(msg->str);
-                break;
-            case WebSocketMessageType::Close:
-            case WebSocketMessageType::Error:
-                spdlog::warn("User-data WS closed/error: code={} reason={}", msg->closeInfo.code, msg->errorInfo.reason);
-                if (running_.load()){
-                    // új listenKey és reconnect
-                    if (create_listen_key()) connect_ws();
-                }
-                break;
-            default: break;
-        }
-    });
-    ws_.start();
-}
-
-void BinanceUserStream::handle_msg(const std::string& s){
-    try{
-        auto j = json::parse(s);
-        if (!j.contains("e")) return;
-        const std::string ev = j["e"].get<std::string>();
-
-        if (ev=="executionReport"){
-            ExecUpdate u;
-            u.orderId   = j.value("i", 0ULL);
-            u.symbol    = j.value("s", std::string{});
-            u.side      = j.value("S", std::string{});
-            u.status    = j.value("X", std::string{});
-            u.lastQty   = to_d(j,"l");
-            u.lastPrice = to_d(j,"L");
-            u.cumQty    = to_d(j,"z");
-            if (on_exec_) on_exec_(u);
-            return;
-        }
-
-        if (ev=="outboundAccountPosition"){
-            std::vector<Balance> bs;
-            if (j.contains("B") && j["B"].is_array()){
-                for (auto& b : j["B"]){
-                    Balance bb;
-                    bb.asset  = b.value("a", std::string{});
-                    bb.free   = to_d(b,"f");
-                    bb.locked = to_d(b,"l");
-                    bs.push_back(bb);
-                }
-            }
-            if (on_balances_) on_balances_(bs);
-            return;
-        }
-
-        if (ev=="balanceUpdate"){
-            std::string asset = j.value("a", std::string{});
-            double delta      = to_d(j,"d");
-            uint64_t et       = j.value("E", 0ULL);
-            if (on_balance_delta_) on_balance_delta_(asset, delta, et);
-            return;
-        }
-
-        if (ev=="listStatus"){
-            ListStatus ls;
-            ls.symbol             = j.value("s", std::string{});
-            ls.listClientOrderId  = j.value("c", std::string{});
-            ls.contingencyType    = j.value("g", std::string{});
-            ls.listStatusType     = j.value("l", std::string{});
-            ls.listOrderStatus    = j.value("L", std::string{});
-            if (on_list_status_) on_list_status_(ls);
-            return;
-        }
-    }catch(const std::exception& e){
-        spdlog::error("user WS parse: {}", e.what());
-    }
-}
+} // namespace data

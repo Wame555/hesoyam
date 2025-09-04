@@ -29,11 +29,15 @@ FetchContent_Declare(json GIT_REPOSITORY https://github.com/nlohmann/json.git GI
 FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git GIT_TAG 1.10.5)
 
 
+# IXWebSocket build opciók – TLS igen, de OpenSSL-lel, zlib nélkül
+set(USE_TLS       ON  CACHE BOOL "" FORCE)
+set(USE_OPEN_SSL  ON  CACHE BOOL "" FORCE)
+set(USE_MBED_TLS  OFF CACHE BOOL "" FORCE)
+set(USE_ZLIB      OFF CACHE BOOL "" FORCE)  # hogy ne kérjen ZLIB-et
+
 # IXWebSocket – TLS-es WebSocket Binance-hez (wss)
 FetchContent_Declare(ixwebsocket   GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git   GIT_TAG v11.4.6)  # 2025-05-14
 # IXWebSocket opciók (mielőtt MakeAvailable!)
-set(USE_TLS ON  CACHE BOOL "" FORCE)   # wss:// támogatás
-set(USE_ZLIB OFF CACHE BOOL "" FORCE)  # nincs zlib, így nem is keresi
 FetchContent_MakeAvailable(fmt spdlog json cpr sfml imgui_sfml ixwebsocket)
 
 # OpenSSL a HMAC-SHA256 aláíráshoz (Binance REST)

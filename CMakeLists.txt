@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.23)
 project(crypto_mod_bot LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# ImGui-SFML ne hívja meg a find_package(SFML)-t, mert mi FetchContent-tel hozzuk
+set(IMGUI_SFML_FIND_SFML OFF CACHE BOOL "" FORCE)
 
 include(FetchContent)
 
@@ -15,7 +17,10 @@ FetchContent_Declare(json GIT_REPOSITORY https://github.com/nlohmann/json.git GI
 FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git GIT_TAG 1.10.5)
 # SFML + ImGui-SFML (GUI)
 FetchContent_Declare(sfml GIT_REPOSITORY https://github.com/SFML/SFML.git GIT_TAG 2.6.1)
+FetchContent_MakeAvailable(sfml)
+# ImGui-SFML -> most már látja a sfml-graphics, sfml-window, stb. targeteket
 FetchContent_Declare(imgui_sfml GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git GIT_TAG v2.6)
+FetchContent_MakeAvailable(imgui_sfml)
 # IXWebSocket – TLS-es WebSocket Binance-hez (wss)
 FetchContent_Declare(ixwebsocket GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git GIT_TAG v11.6.3)
 

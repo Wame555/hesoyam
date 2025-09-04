@@ -3,45 +3,28 @@ project(crypto_mod_bot LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include(FetchContent)
+# --- vcpkg toolchain szükséges a configure során
+# cmake -S . -B build -A x64 ^
+#   -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+#   -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
 
-# --- ImGui-SFML ne keressen külön SFML-t
-set(IMGUI_SFML_FIND_SFML OFF CACHE BOOL "" FORCE)
-
-# --- SFML a saját extlibs-eivel (ne rendszerszintűt használjon)
-set(SFML_USE_SYSTEM_DEPS OFF CACHE BOOL "" FORCE)
-
-# --- TLS beállítások az IXWebSockethez
-set(USE_TLS       ON  CACHE BOOL "" FORCE)
-set(USE_OPEN_SSL  ON  CACHE BOOL "" FORCE)
-set(USE_MBED_TLS  OFF CACHE BOOL "" FORCE)
-set(USE_ZLIB      OFF CACHE BOOL "" FORCE)
-
-# --- FetchContent források
-##FetchContent_Declare(sfml GIT_REPOSITORY https://github.com/SFML/SFML.git GIT_TAG 2.6.1)
-##FetchContent_MakeAvailable(sfml)
-
-##FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.90.9)
-##FetchContent_MakeAvailable(imgui)
-##set(IMGUI_DIR "${imgui_SOURCE_DIR}" CACHE PATH "" FORCE)
-
-##FetchContent_Declare(imgui_sfml GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git GIT_TAG v2.6)
-##FetchContent_MakeAvailable(imgui_sfml)
+# --- 3rd party (mind vcpkg-ből)
+find_package(fmt CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(cpr CONFIG REQUIRED)
+find_package(ixwebsocket CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+# SFML 3 (vagy bármi): a vcpkg-n 3.0.1 az alap
 find_package(SFML CONFIG REQUIRED COMPONENTS Graphics Window System)
 find_package(ImGui-SFML CONFIG REQUIRED)
 
-FetchContent_Declare(fmt GIT_REPOSITORY https://github.com/fmtlib/fmt.git GIT_TAG 11.0.2)
-FetchContent_Declare(spdlog GIT_REPOSITORY https://github.com/gabime/spdlog.git GIT_TAG v1.14.1)
-FetchContent_Declare(json GIT_REPOSITORY https://github.com/nlohmann/json.git GIT_TAG v3.11.3)
-FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git GIT_TAG 1.10.5)
-FetchContent_Declare(ixwebsocket GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git GIT_TAG v11.4.6)
-FetchContent_MakeAvailable(fmt spdlog json cpr ixwebsocket)
-
-find_package(OpenSSL REQUIRED)
-
+# --- include path a saját headerjeinkhez
 include_directories(include)
 
-# --- Könyvtárak
+# ===================== KÖNYVTÁRAK =====================
+
+# Indicators
 add_library(indicators
     src/indicators/rsi.cpp
     src/indicators/sma_ema.cpp
@@ -50,53 +33,66 @@ add_library(indicators
 target_link_libraries(indicators PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json)
 target_include_directories(indicators PUBLIC include)
 
+# Strategy (header-only)
 add_library(strategy INTERFACE)
 target_include_directories(strategy INTERFACE include)
 target_link_libraries(strategy INTERFACE fmt::fmt spdlog::spdlog)
 
+# Sim (header-only)
 add_library(sim INTERFACE)
 target_include_directories(sim INTERFACE include)
 target_link_libraries(sim INTERFACE spdlog::spdlog fmt::fmt)
 
+# Data (WS + user-data stream) – KELL a cpr is a header miatt
 add_library(data
     src/data/binance_ws.cpp
     src/data/binance_userstream.cpp)
-# <- Itt a cpr!
-target_link_libraries(data PUBLIC ixwebsocket nlohmann_json::nlohmann_json spdlog::spdlog fmt::fmt cpr::cpr)
+target_link_libraries(data PUBLIC
+    ixwebsocket::ixwebsocket
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog fmt::fmt
+    cpr::cpr)
 target_include_directories(data PUBLIC include)
 
+# Telemetry (Telegram -> cpr)
 add_library(telemetry
     src/telemetry/telegram_notifier.cpp)
 target_link_libraries(telemetry PUBLIC cpr::cpr spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
 target_include_directories(telemetry PUBLIC include)
 
+# Exec (Binance REST + risk + position tracker)
 add_library(exec
     src/exec/binance_rest.cpp
     src/exec/filters.cpp
     src/exec/order_state.cpp
     src/exec/position_tracker.cpp)
-target_link_libraries(exec PUBLIC cpr::cpr OpenSSL::SSL OpenSSL::Crypto spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
+target_link_libraries(exec PUBLIC
+    cpr::cpr
+    OpenSSL::SSL OpenSSL::Crypto
+    spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
 target_include_directories(exec PUBLIC include)
 
+# UI (SFML + ImGui-SFML)
 add_library(ui
     src/ui/gui_app.cpp)
 target_link_libraries(ui PUBLIC
   ImGui-SFML::ImGui-SFML
-  sfml-graphics sfml-window sfml-system
+  SFML::Graphics SFML::Window SFML::System
   spdlog::spdlog fmt::fmt
   indicators strategy telemetry data sim exec)
 target_include_directories(ui PUBLIC include)
 
-# --- Alkalmazások
+# ===================== APP-OK =====================
+
 add_executable(bot_gui apps/bot_gui.cpp)
 target_link_libraries(bot_gui PRIVATE ui)
 
 add_executable(backtester apps/backtester.cpp)
 target_link_libraries(backtester PRIVATE indicators strategy spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
 
+# Windows: SFML DLL-ek másolása (opcionális)
 if (WIN32)
   add_custom_command(TARGET bot_gui POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-      $<TARGET_FILE_DIR:sfml-graphics>/../..
-      $<TARGET_FILE_DIR:bot_gui>)
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying SFML/ImGui-SFML runtime dlls (vcpkg handles PATH typically)"
+  )
 endif()

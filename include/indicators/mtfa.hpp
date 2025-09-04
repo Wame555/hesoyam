@@ -1,13 +1,14 @@
 #pragma once
 #include <deque>
-#include <string>              // <-- fontos!
+#include <string>
 #include <algorithm>
-#include "core/module.hpp"     // IModule, Bar, Symbol, Signal
+#include <cmath>
+#include "core/module.hpp"   // IModule, ModuleResult, Bar, Symbol, Signal
 
 namespace ind {
 
 // Egyszerű MTF "EMA-kereszt" modul.
-// factor_: hány alacsonyabb TF bar ad ki egy magasabb TF bart (pl. 12: M5->H1)
+// factor_ = hány alacsonyabb TF bar tesz ki 1 magasabb TF bart (pl. 12: M5 -> H1)
 class MtfSmaModule final : public IModule {
     size_t factor_;
     size_t fast_p_;
@@ -34,11 +35,12 @@ public:
 
     ModuleResult on_bar(const Symbol&, Timeframe, const Bar& b) override {
         low_closes_.push_back(b.close);
-        // tartsa kordában a memory-t
-        const size_t keep = factor_ * (slow_p_ + 50);
+
+        // memóriakorlát
+        const size_t keep = std::max<size_t>(factor_ * (slow_p_ + 50), 512);
         while (low_closes_.size() > keep) low_closes_.pop_front();
 
-        // minden factor_ db low-TF bar után "hozzáadunk" egy magasabb TF zárót
+        // minden factor_ bar után "zárunk" egy magasabb TF bart
         if (factor_ > 0 && (low_closes_.size() % factor_) == 0) {
             hi_closes_.push_back(b.close);
             while (hi_closes_.size() > (slow_p_ + 50)) hi_closes_.pop_front();

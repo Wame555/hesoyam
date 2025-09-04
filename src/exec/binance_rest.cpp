@@ -63,7 +63,7 @@ json BinanceRest::http_get(const std::string& path, const std::string& query, bo
         q += "&signature="+sig;
     }
     cpr::Header hdr = {{"X-MBX-APIKEY", cfg_.api_key}};
-    auto req = cpr::Get(cpr::Url{url}, cpr::Parameters{}, cpr::Header{signed_req?hdr: cpr::Header{}}, cpr::Parameters{{}}, cpr::Timeout{cfg_.timeout_ms}, cpr::Parameters{}, cpr::Parameters{}, cpr::Body{}, cpr::Proxies{}, cpr::VerifySsl{ cpr::VerifySsl{true});
+    auto req = cpr::Get(cpr::Url{url}, cpr::Parameters{}, cpr::Header{signed_req?hdr: cpr::Header{}}, cpr::Parameters{{}}, cpr::Timeout{cfg_.timeout_ms}, cpr::Parameters{}, cpr::Parameters{}, cpr::Body{}, cpr::Proxies{}, cpr::VerifySsl{true});
     // cpr nem a legszebb itt; egyszerűbb:
     cpr::Response r;
 if (!q.empty())

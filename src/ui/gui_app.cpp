@@ -82,8 +82,9 @@ struct GuiApp::Impl {
     exec::RiskManager risk{2.0};
     std::string last_exec_msg;
 
-    // User-data stream
-    std::unique_ptr<BinanceUserStream> uds; bool uds_connected{false};
+    // user-data stream
+    std::unique_ptr<data::BinanceUserStream> uds;  // <<< data::
+    bool uds_connected{false};
 
     // OCO bracket
     bool attach_bracket{true};
@@ -295,12 +296,14 @@ void GuiApp::run(){
                 self->spot = std::make_unique<exec::BinanceRest>(cfg);
                 self->last_exec_msg = self->spot->ping();
                 // user-data stream
-                self->uds = std::make_unique<BinanceUserStream>(self->api_key, self->testnet);
-                self->uds->set_on_exec([this](const ExecUpdate& u){
-                    if (u.lastQty>0){
-                        if (u.side=="BUY") self->pos_tracker.on_fill_buy(u.symbol, u.lastQty, u.lastPrice);
-                        else               self->pos_tracker.on_fill_sell(u.symbol, u.lastQty, u.lastPrice);
-                    }
+                self->uds = std::make_unique<data::BinanceUserStream>(self->api_key, self->testnet);  // <<< data::
+                self->uds->set_on_exec([this](const data::ExecUpdate& u){  // <<< data::
+                if (u.lastQty > 0) {
+                if (u.side == "BUY")
+                self->pos_tracker.on_fill_buy(u.symbol, u.lastQty, u.lastPrice);
+                else
+                self->pos_tracker.on_fill_sell(u.symbol, u.lastQty, u.lastPrice);
+                }
                 });
                 self->uds->set_on_balances([this](const std::vector<Balance>& v){
                     for (auto& b : v){ self->balances[b.asset] = {b.free, b.locked}; }
@@ -316,11 +319,14 @@ void GuiApp::run(){
             }
             ImGui::TextWrapped("%s", self->last_exec_msg.c_str());
             ImGui::Separator();
-            if (!self->uds_connected){
-                if (ImGui::Button("Start user-data stream") && self->uds) self->uds_connected = self->uds->start();
-            } else {
+            if (!self->uds_connected) {
+                if (ImGui::Button("Start user-data stream") && self->uds)
+                self->uds_connected = self->uds->start();  // <<< most már oké, teljes típus ismert
+                } else {
                 ImGui::SameLine();
-                if (ImGui::Button("Stop user-data stream")){ if (self->uds){ self->uds->stop(); self->uds_connected=false; } }
+                if (ImGui::Button("Stop user-data stream")) {
+                    if (self->uds) { self->uds->stop(); self->uds_connected = false; }
+                }
             }
             ImGui::Checkbox("Attach OCO bracket after BUY", &self->attach_bracket);
             ImGui::InputDouble("LIVE SL %", &self->live_sl_pct, 0.1, 1.0, "%.2f");

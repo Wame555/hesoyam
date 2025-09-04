@@ -18,15 +18,17 @@ set(USE_MBED_TLS  OFF CACHE BOOL "" FORCE)
 set(USE_ZLIB      OFF CACHE BOOL "" FORCE)
 
 # --- FetchContent források
-FetchContent_Declare(sfml GIT_REPOSITORY https://github.com/SFML/SFML.git GIT_TAG 2.6.1)
-FetchContent_MakeAvailable(sfml)
+##FetchContent_Declare(sfml GIT_REPOSITORY https://github.com/SFML/SFML.git GIT_TAG 2.6.1)
+##FetchContent_MakeAvailable(sfml)
 
-FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.90.9)
-FetchContent_MakeAvailable(imgui)
-set(IMGUI_DIR "${imgui_SOURCE_DIR}" CACHE PATH "" FORCE)
+##FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.90.9)
+##FetchContent_MakeAvailable(imgui)
+##set(IMGUI_DIR "${imgui_SOURCE_DIR}" CACHE PATH "" FORCE)
 
-FetchContent_Declare(imgui_sfml GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git GIT_TAG v2.6)
-FetchContent_MakeAvailable(imgui_sfml)
+##FetchContent_Declare(imgui_sfml GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git GIT_TAG v2.6)
+##FetchContent_MakeAvailable(imgui_sfml)
+find_package(SFML 2.6 CONFIG REQUIRED COMPONENTS System Window Graphics)
+find_package(ImGui-SFML CONFIG REQUIRED)
 
 FetchContent_Declare(fmt GIT_REPOSITORY https://github.com/fmtlib/fmt.git GIT_TAG 11.0.2)
 FetchContent_Declare(spdlog GIT_REPOSITORY https://github.com/gabime/spdlog.git GIT_TAG v1.14.1)

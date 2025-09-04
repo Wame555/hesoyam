@@ -30,7 +30,7 @@ FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git GIT_TA
 
 
 # IXWebSocket – TLS-es WebSocket Binance-hez (wss)
-FetchContent_Declare(ixwebsocket GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git GIT_TAG v11.6.3)
+FetchContent_Declare(ixwebsocket   GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git   GIT_TAG v11.4.6)  # 2025-05-14
 
 FetchContent_MakeAvailable(fmt spdlog json cpr sfml imgui_sfml ixwebsocket)
 

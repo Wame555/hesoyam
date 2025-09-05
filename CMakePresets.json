@@ -1,0 +1,22 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "win-rel-vcpkg",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_MANIFEST_FEATURES": "",
+        "CMAKE_CXX_STANDARD": "20",
+        "BUILD_GUI": "ON",
+        "BUILD_BACKTEST": "OFF",
+        "BUILD_LIVE": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "win-rel", "configurePreset": "win-rel-vcpkg" }
+  ]
+}

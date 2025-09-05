@@ -26,6 +26,18 @@
 #include "exec/position_tracker.hpp"
 #include "sim/demo_account.hpp"
 
+// --- ensure IModule complete type is visible here
+#if __has_include("core/module.hpp")
+  #include "core/module.hpp"
+#elif __has_include("core/imodule.hpp")
+  #include "core/imodule.hpp"
+#elif __has_include("module.hpp")
+  #include "module.hpp"
+#else
+  #error "Nem találom az IModule definíció headerét. Add meg a helyes include-ot."
+#endif
+
+using core::IModule;
 using Clock = std::chrono::steady_clock;
 
 namespace ui {

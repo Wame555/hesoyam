@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <algorithm>
+#include "core/module.hpp"   // core::IModule teljes definíciója
 
 #include "indicators/rsi.hpp"
 #include "indicators/sma_ema.hpp"
@@ -305,17 +306,19 @@ void GuiApp::run(){
                 self->pos_tracker.on_fill_sell(u.symbol, u.lastQty, u.lastPrice);
                 }
                 });
-                self->uds->set_on_balances([this](const std::vector<Balance>& v){
-                    for (auto& b : v){ self->balances[b.asset] = {b.free, b.locked}; }
+                self->uds->set_on_balances([this](const std::vector<data::Balance>& v){
+                for (auto& b : v){ self->balances[b.asset] = {b.free, b.locked}; }
                 });
                 self->uds->set_on_balance_delta([this](const std::string& a, double d, uint64_t E){
                     char buf[160]; std::snprintf(buf, sizeof(buf), "%s delta=%.8f @%llu", a.c_str(), d, (unsigned long long)E);
                     self->bal_log.emplace_back(buf);
                 });
-                self->uds->set_on_list_status([this](const ListStatus& ls){
-                    self->log.push_back({(uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count(),
-                        std::string("OCO listStatus: ")+ls.listOrderStatus+" "+ls.listStatusType+" sym="+ls.symbol});
-                });
+                self->uds->set_on_list_status([this](const data::ListStatus& ls){
+    self->log.push_back({
+        (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count(),
+        std::string("OCO listStatus: ")+ls.listOrderStatus+" "+ls.listStatusType+" sym="+ls.symbol
+    });
+});
             }
             ImGui::TextWrapped("%s", self->last_exec_msg.c_str());
             ImGui::Separator();

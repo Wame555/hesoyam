@@ -1,0 +1,15 @@
+{
+  "name": "hesoyam",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "sfml",
+    "imgui",
+    "imgui-sfml",
+    "spdlog",
+    "fmt",
+    "nlohmann-json",
+    "cpr",
+    "ixwebsocket"
+  ],
+  "builtin-baseline": "c8f8c7a5e8a5a6b7b2d7f8c9a0b1c2d3e4f5a6b7" 
+}
